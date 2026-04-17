@@ -1,6 +1,4 @@
 ---
-# Rôle devtools : orchestration des sous‑tâches
-
 - name: Ajouter les dépôts RPM
   ansible.builtin.include_tasks: repos.yml
 
@@ -12,6 +10,13 @@
 
 - name: Installer Docker
   ansible.builtin.include_tasks: docker.yml
+
+- name: Installer VSCode
+  ansible.builtin.include_tasks: vscode.yml
+
+- name: Installer VSCodium
+  ansible.builtin.include_tasks: vscodium.yml
+  when: install_vscodium
 
 - name: Installer JetBrains Toolbox
   ansible.builtin.include_tasks: jetbrains.yml

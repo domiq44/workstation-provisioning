@@ -1,20 +1,36 @@
 ---
-- name: Supprimer podman-docker avant installation Docker
+# ===================================================================
+# Docker — version Fedora 44 optimisée
+# ===================================================================
+
+- name: Supprimer podman-docker (conflit avec Docker)
   become: true
   ansible.builtin.dnf:
     name: podman-docker
     state: absent
 
-- name: Installer Docker
+- name: Installer Docker (moby-engine + compose plugin)
   become: true
   ansible.builtin.dnf:
     name: "{{ docker_packages }}"
     state: present
   notify: restart docker
 
-- name: Activer Docker
+- name: Recharger systemd après installation Docker
+  become: true
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Activer et démarrer Docker
   become: true
   ansible.builtin.service:
-    name: "{{ docker_service }}"
+    name: docker
     enabled: true
     state: started
+
+- name: Ajouter l'utilisateur courant au groupe docker
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_facts.env.USER }}"
+    groups: docker
+    append: true

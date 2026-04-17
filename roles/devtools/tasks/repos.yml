@@ -1,12 +1,20 @@
 ---
-- name: Ajouter les dépôts RPM nécessaires
+- name: Gérer les dépôts RPM
   become: true
   ansible.builtin.yum_repository:
     name: "{{ item.name }}"
     description: "{{ item.description }}"
     baseurl: "{{ item.baseurl }}"
-    enabled: "{{ item.enabled | default(true) }}"
-    gpgcheck: "{{ item.gpgcheck | default(true) }}"
-    repo_gpgcheck: "{{ item.repo_gpgcheck | default(false) }}"
     gpgkey: "{{ item.gpgkey }}"
+    enabled: "{{ item.enabled | bool }}"
+    gpgcheck: "{{ item.gpgcheck }}"
+    repo_gpgcheck: "{{ item.repo_gpgcheck }}"
+    state: "{{ 'present' if item.enabled | bool else 'absent' }}"
   loop: "{{ rpm_repositories }}"
+
+- name: Supprimer le dépôt VSCodium si désactivé
+  become: true
+  ansible.builtin.file:
+    path: /etc/yum.repos.d/VSCodium.repo
+    state: absent
+  when: not install_vscodium

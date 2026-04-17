@@ -1,21 +1,8 @@
 ---
-# ===================================================================
-# VSCode — version 100 % idempotente et compatible Ansible 2.18
-# ===================================================================
-
-- name: Ajouter le dépôt VSCode
-  become: true
-  ansible.builtin.copy:
-    dest: "{{ vscode_repo_file }}"
-    content: "{{ vscode_repo_content }}"
-    owner: root
-    group: root
-    mode: '0644'
-
 - name: Installer VSCode
   become: true
   ansible.builtin.dnf:
-    name: "{{ vscode_package }}"
+    name: code
     state: present
 
 - name: Créer le dossier de configuration VSCode
@@ -24,19 +11,8 @@
     state: directory
     mode: '0755'
 
-- name: Générer settings.json VSCode (idempotent)
+- name: Générer settings.json VSCode
   ansible.builtin.template:
     src: "settings.json.j2"
     dest: "{{ vscode_settings_file }}"
     mode: '0644'
-
-- name: Installer VSCode Insiders
-  become: true
-  ansible.builtin.dnf:
-    name: code-insiders
-    state: present
-  when: install_vscode_insiders
-  tags:
-    - devtools
-    - vscode
-    - vscode_insiders

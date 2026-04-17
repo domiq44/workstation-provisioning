@@ -1,6 +1,6 @@
 ---
 # ============================
-# Dépôts RPM (factorisés)
+# Dépôts RPM
 # ============================
 rpm_repositories:
   - name: vscode
@@ -9,19 +9,21 @@ rpm_repositories:
     gpgkey: https://packages.microsoft.com/keys/microsoft.asc
     enabled: true
     gpgcheck: true
+    repo_gpgcheck: true
 
   - name: VSCodium
-    description: VSCodium RPM Repository
-    baseurl: https://paulcarroty.gitlab.io/vscodium-deb-rpm-repo/rpms/
+    description: VSCodium RPM Repository (Legacy)
+    baseurl: https://download.vscodium.com/rpms/
     gpgkey: https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg
-    enabled: true
+    enabled: "{{ install_vscodium }}"
     gpgcheck: true
     repo_gpgcheck: true
 
 # ============================
-# VSCode (stable + insiders)
+# VSCode / VSCodium
 # ============================
-install_vscode_insiders: true
+install_vscode_insiders: false
+install_vscodium: false
 
 vscode_settings_file: "{{ ansible_facts.env.HOME }}/.config/Code/User/settings.json"
 vscode_settings:
@@ -29,7 +31,6 @@ vscode_settings:
   telemetry.enableCrashReporter: false
   telemetry.enableTelemetry: false
 
-# Liste factorisée des éditeurs
 editors:
   - name: code
     enabled: true
@@ -38,16 +39,14 @@ editors:
     enabled: "{{ install_vscode_insiders }}"
 
   - name: codium
-    enabled: true
+    enabled: "{{ install_vscodium }}"
 
 # ============================
-# Groupes de paquets système
+# Paquets système
 # ============================
 docker_packages:
   - moby-engine
   - docker-compose
-
-docker_service: docker
 
 podman_packages:
   - podman
@@ -83,7 +82,6 @@ package_groups:
 # JetBrains Toolbox
 # ============================
 jetbrains_version: "2.3.2.31487"
-
 jetbrains_url: "https://download.jetbrains.com/toolbox/jetbrains-toolbox-{{ jetbrains_version }}.tar.gz"
 jetbrains_checksum_url: "https://download.jetbrains.com/toolbox/jetbrains-toolbox-{{ jetbrains_version }}.tar.gz.sha256"
 
