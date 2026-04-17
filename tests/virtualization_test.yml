@@ -1,0 +1,106 @@
+---
+- name: Test d'intégration Vagrant + libvirt
+  hosts: localhost
+  gather_facts: false
+  tags: ["virtualization_test"]
+
+  tasks:
+
+    # ---------------------------------------------------------------
+    # Pré‑vérifications
+    # ---------------------------------------------------------------
+
+    - name: Vérifier que Vagrant est installé
+      ansible.builtin.command: vagrant --version
+      changed_when: false
+
+    - name: Vérifier que libvirtd est actif
+      become: true
+      ansible.builtin.service_facts:
+
+    - name: Vérifier service libvirtd
+      assert:
+        that:
+          - ansible_facts.services["libvirtd.service"].state == "running"
+        fail_msg: "libvirtd n'est pas actif, impossible de tester Vagrant/libvirt"
+
+    # ---------------------------------------------------------------
+    # Préparation du dossier temporaire
+    # ---------------------------------------------------------------
+
+    - name: Créer dossier test Vagrant
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: vagrant-test-
+      register: testdir
+
+    - name: Créer Vagrantfile
+      ansible.builtin.copy:
+        dest: "{{ testdir.path }}/Vagrantfile"
+        mode: "0644"
+        content: |
+          Vagrant.configure("2") do |config|
+            config.vm.box = "generic/alpine38"
+            config.vm.provider :libvirt do |libvirt|
+            end
+          end
+
+    # ---------------------------------------------------------------
+    # Lancement de la VM
+    # ---------------------------------------------------------------
+
+    - name: Purger cache Vagrant
+      ansible.builtin.command: vagrant global-status --prune
+      changed_when: false
+
+    - name: Démarrer le réseau vagrant-libvirt si possible
+      become: true
+      ansible.builtin.command: virsh net-start vagrant-libvirt
+      register: vagrant_net_start
+      failed_when: false
+      changed_when: vagrant_net_start.rc == 0
+
+    - name: Lancer VM Vagrant
+      ansible.builtin.command:
+        cmd: vagrant up --provider=libvirt --no-provision
+        chdir: "{{ testdir.path }}"
+      register: vagrant_up
+      failed_when: vagrant_up.rc != 0
+
+    # ---------------------------------------------------------------
+    # Test SSH
+    # ---------------------------------------------------------------
+
+    - name: Test SSH dans la VM
+      ansible.builtin.command:
+        cmd: vagrant ssh -c "cat /etc/os-release"
+        chdir: "{{ testdir.path }}"
+      register: ssh_test
+      changed_when: false
+
+    - name: Vérifier que la VM répond via SSH
+      assert:
+        that:
+          - "'Alpine' in ssh_test.stdout"
+        fail_msg: "La VM ne répond pas correctement via SSH"
+
+    # ---------------------------------------------------------------
+    # Nettoyage
+    # ---------------------------------------------------------------
+
+    - name: Arrêter VM
+      ansible.builtin.command:
+        cmd: vagrant halt
+        chdir: "{{ testdir.path }}"
+      ignore_errors: true
+
+    - name: Détruire VM
+      ansible.builtin.command:
+        cmd: vagrant destroy -f
+        chdir: "{{ testdir.path }}"
+      ignore_errors: true
+
+    - name: Supprimer dossier test
+      ansible.builtin.file:
+        path: "{{ testdir.path }}"
+        state: absent

@@ -1,0 +1,57 @@
+---
+# Scripts à installer dans /etc/profile.d
+profile_scripts:
+  - custom-prompt.sh
+  - custom-aliases.sh
+  - vagrant-cert.sh
+
+# Scripts à installer dans ~/bin
+bin_scripts:
+  - backup-clion.sh
+  - backup-idea.sh
+  - borg-diskforge
+  - borg-homeshield
+  - borg-restore
+  - c
+  - vagrant-clean.sh
+  - what-depends
+
+# Pages man utilisateur
+manpages:
+  - borg-diskforge.1
+  - borg-homeshield.1
+
+# Paquets système
+user_env_packages:
+  - bleachbit
+  - borgbackup
+  - btop
+  - btrfs-assistant
+  - cockpit
+  - dos2unix
+  - dosbox
+  - epiphany
+  - fastfetch
+  - git
+  - gitg
+  - gnome-mahjongg
+  - gnuplot
+  - gparted
+  - graphviz
+  - htop
+  - jq
+  - keepassxc
+  - meld
+  - moreutils
+  - mtools
+  - ncdu
+  - parcellite
+  - plantuml
+  - rpi-imager
+  - sharutils
+  - sqlitebrowser
+  - syncthing
+  - tree
+  - vim
+  - xclip
+  - xsel

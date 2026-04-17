@@ -1,0 +1,8 @@
+---
+- name: Installer les éditeurs de code
+  become: true
+  ansible.builtin.dnf:
+    name: "{{ item.name }}"
+    state: present
+  loop: "{{ editors }}"
+  when: item.enabled

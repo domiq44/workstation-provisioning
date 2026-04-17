@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+###############################################################################
+# ██████╗  ██████╗  ██████╗  ██████╗     ██╗  ██╗ ██████╗ ███╗   ███╗███████╗
+# ██╔══██╗██╔═══██╗██╔════╝ ██╔═══██╗    ██║  ██║██╔═══██╗████╗ ████║██╔════╝
+# ██████╔╝██║   ██║██║  ███╗██║   ██║    ███████║██║   ██║██╔████╔██║█████╗  
+# ██╔══██╗██║   ██║██║   ██║██║   ██║    ██╔══██║██║   ██║██║╚██╔╝██║██╔══╝  
+# ██████╔╝╚██████╔╝╚██████╔╝╚██████╔╝    ██║  ██║╚██████╔╝██║ ╚═╝ ██║███████╗
+# ╚═════╝  ╚═════╝  ╚═════╝  ╚═════╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝
+#
+#                         borg‑homeshield — sauvegarde $HOME
+###############################################################################
+# Version auto‑détectante du disque externe :
+#   - Détection automatique du périphérique par LABEL=BackupDisk
+#   - Détection automatique du point de montage
+#   - Montage automatique si nécessaire
+#   - Sauvegarde complète de $HOME avec exclusions intelligentes
+###############################################################################
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+LABEL="BackupDisk"
+LOGDIR="$HOME/.local/log/borgbackup"
+GLOBAL_LOG="$LOGDIR/borg_backup.log"
+RUN_LOG="$LOGDIR/borg_$(date +%Y-%m-%d_%H-%M-%S).log"
+LOCKFILE="/tmp/borg_backup.lock"
+
+mkdir -p "$LOGDIR"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" \
+        | tee -a "$GLOBAL_LOG" "$RUN_LOG"
+}
+
+# === Verrouillage ===
+exec 9>"$LOCKFILE"
+if ! flock -n 9; then
+    log "[ERREUR] Une sauvegarde est déjà en cours."
+    exit 1
+fi
+
+log "=== DÉBUT DE LA SAUVEGARDE ==="
+
+# === 1. Détection automatique du périphérique ===
+DEVICE=$(lsblk -o NAME,LABEL -nr | awk -v lbl="$LABEL" '$2==lbl {print "/dev/"$1}')
+
+if [ -z "$DEVICE" ]; then
+    log "[ERREUR] Aucun disque avec LABEL=$LABEL trouvé."
+    exit 1
+fi
+
+log "[OK] Disque détecté : $DEVICE"
+
+# === 2. Détection du point de montage ===
+MOUNTPOINT=$(lsblk -o MOUNTPOINT -nr "$DEVICE" | head -n1)
+
+if [ -z "$MOUNTPOINT" ]; then
+    log "[INFO] Le disque n'est pas monté. Tentative de montage…"
+    udisksctl mount -b "$DEVICE" >/dev/null
+
+    MOUNTPOINT=$(lsblk -o MOUNTPOINT -nr "$DEVICE" | head -n1)
+
+    if [ -z "$MOUNTPOINT" ]; then
+        log "[ERREUR] Impossible de monter le disque."
+        exit 1
+    fi
+fi
+
+log "[OK] Disque monté sur : $MOUNTPOINT"
+
+REPO="$MOUNTPOINT/borg_repo"
+
+# === 3. Vérification de l'espace disque ===
+FREE_GB=$(df --output=avail -BG "$MOUNTPOINT" | tail -1 | tr -dc '0-9')
+if (( FREE_GB < 5 )); then
+    log "[ERREUR] Espace disque insuffisant (<5 Go)."
+    exit 1
+fi
+log "[OK] Espace disque suffisant : ${FREE_GB} Go libres."
+
+# === 4. Répertoire source ===
+SOURCE_DIRS=("$HOME")
+
+# === 5. Exclusions ===
+EXCLUDES=(
+    "--exclude=$HOME/distrib"
+
+    "--exclude=$HOME/.cache"
+    "--exclude=$HOME/.local/share/Trash"
+    "--exclude=$HOME/.thumbnails"
+    "--exclude=$HOME/.gvfs"
+    "--exclude=$HOME/.run"
+    "--exclude=$HOME/.dbus"
+
+    "--exclude=$HOME/.local/share/flatpak"
+    "--exclude=$HOME/.local/share/containers"
+    "--exclude=$HOME/.local/share/podman"
+
+    "--exclude=$HOME/.vagrant.d"
+
+    "--exclude=$HOME/.cache/JetBrains"
+    "--exclude=$HOME/.local/share/JetBrains/*/caches"
+    "--exclude=$HOME/.local/share/JetBrains/*/log"
+    "--exclude=$HOME/.local/share/JetBrains/*/tmp"
+    "--exclude=$HOME/.local/share/JetBrains/Toolbox"
+
+    "--exclude=$HOME/**/.metadata"
+
+    "--exclude=$HOME/.m2/repository"
+    "--exclude=$HOME/.gradle/caches"
+    "--exclude=$HOME/.cargo/registry"
+    "--exclude=$HOME/.cargo/git"
+    "--exclude=$HOME/.npm"
+    "--exclude=$HOME/.cache/go-build"
+    "--exclude=$HOME/.rustup/toolchains/*/lib/rustlib/src"
+
+    "--exclude=$HOME/VirtualBox VMs"
+    "--exclude=$HOME/.local/share/libvirt"
+    "--exclude=$HOME/.docker"
+
+    "--exclude=$HOME/tmp"
+    "--exclude=$HOME/.tmp"
+)
+
+ARCHIVE_NAME="$(hostname)-$(date +%Y-%m-%d_%H-%M)"
+
+# === 6. Vérification du dépôt Borg ===
+if ! borg info "$REPO" >/dev/null 2>&1; then
+    log "[INFO] Initialisation du dépôt Borg…"
+    mkdir -p "$REPO"
+    borg init --encryption=repokey "$REPO"
+else
+    log "[OK] Dépôt Borg valide."
+fi
+
+# === 7. Création de la sauvegarde ===
+log "[INFO] Début de la sauvegarde : $ARCHIVE_NAME"
+
+set +o errexit
+
+stdbuf -oL -eL borg create \
+    --verbose \
+    --stats \
+    --progress \
+    --compression lz4 \
+    "${EXCLUDES[@]}" \
+    "$REPO::$ARCHIVE_NAME" \
+    "${SOURCE_DIRS[@]}" \
+    2>&1 | ts '[%Y-%m-%d %H:%M:%S]' | tee -a "$RUN_LOG"
+
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+    log "[ERREUR] La sauvegarde a échoué."
+    exit 1
+fi
+
+set -o errexit
+
+log "[OK] Sauvegarde terminée."
+
+# === 8. Politique de rétention ===
+log "[INFO] Nettoyage des anciennes sauvegardes…"
+
+set +o errexit
+borg prune -v "$REPO" \
+    --keep-daily=7 \
+    --keep-weekly=4 \
+    --keep-monthly=6 \
+    2>&1 | ts '[%Y-%m-%d %H:%M:%S]' | tee -a "$RUN_LOG"
+
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+    log "[ERREUR] Le nettoyage a échoué."
+    exit 1
+fi
+set -o errexit
+
+log "[OK] Nettoyage terminé."
+
+# === 9. Vérification mensuelle ===
+if [ "$(date +%d)" = "01" ]; then
+    log "[INFO] Vérification mensuelle du dépôt…"
+    borg check "$REPO" \
+        2>&1 | ts '[%Y-%m-%d %H:%M:%S]' | tee -a "$RUN_LOG"
+fi
+
+log "=== FIN DE LA SAUVEGARDE ==="
+
+

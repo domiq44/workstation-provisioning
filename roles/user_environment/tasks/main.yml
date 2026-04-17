@@ -1,0 +1,24 @@
+- import_tasks: bash.yml
+  tags:
+    - user_env
+    - user_env::bash
+
+- import_tasks: binfiles.yml
+  tags:
+    - user_env
+    - user_env::binfiles
+
+- import_tasks: dotfiles.yml
+  tags:
+    - user_env
+    - user_env::dotfiles
+
+- import_tasks: packages.yml
+  tags:
+    - user_env
+    - user_env::packages
+
+- import_tasks: vagrant.yml
+  tags:
+    - user_env
+    - user_env::vagrant

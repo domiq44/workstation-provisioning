@@ -1,0 +1,88 @@
+---
+# ===================================================================
+# JetBrains Toolbox — version 100 % idempotente
+# ===================================================================
+
+# ---------------------------------------------------------------
+# 1. Récupération automatique du checksum SHA256
+# ---------------------------------------------------------------
+
+- name: Télécharger le fichier checksum SHA256
+  become: true
+  ansible.builtin.get_url:
+    url: "{{ jetbrains_checksum_url }}"
+    dest: "/tmp/jetbrains-toolbox-{{ jetbrains_version }}.sha256"
+    mode: '0644'
+
+- name: Lire le fichier checksum
+  ansible.builtin.slurp:
+    src: "/tmp/jetbrains-toolbox-{{ jetbrains_version }}.sha256"
+  register: jetbrains_checksum_raw
+
+- name: Extraire le hash SHA256
+  ansible.builtin.set_fact:
+    jetbrains_checksum: "sha256:{{ (jetbrains_checksum_raw.content | b64decode).split()[0] }}"
+
+# ---------------------------------------------------------------
+# 2. Téléchargement du tar.gz (idempotent grâce au checksum)
+# ---------------------------------------------------------------
+
+- name: Télécharger JetBrains Toolbox (idempotent)
+  become: true
+  ansible.builtin.get_url:
+    url: "{{ jetbrains_url }}"
+    dest: "{{ jetbrains_archive }}"
+    mode: '0644'
+    checksum: "{{ jetbrains_checksum }}"
+
+# ---------------------------------------------------------------
+# 3. Installation versionnée
+# ---------------------------------------------------------------
+
+- name: Créer le dossier versionné
+  become: true
+  ansible.builtin.file:
+    path: "{{ jetbrains_install_dir }}/{{ jetbrains_version }}"
+    state: directory
+    mode: '0755'
+
+- name: Extraire JetBrains Toolbox (idempotent)
+  become: true
+  ansible.builtin.unarchive:
+    src: "{{ jetbrains_archive }}"
+    dest: "{{ jetbrains_install_dir }}/{{ jetbrains_version }}"
+    remote_src: true
+    creates: "{{ jetbrains_install_dir }}/{{ jetbrains_version }}/jetbrains-toolbox"
+  when: not ansible_check_mode
+
+# ---------------------------------------------------------------
+# 4. Lien stable "current" + lien global (version robuste)
+# ---------------------------------------------------------------
+
+- name: Mettre à jour le lien symbolique 'current'
+  become: true
+  ansible.builtin.file:
+    src: "{{ jetbrains_install_dir }}/{{ jetbrains_version }}"
+    dest: "{{ jetbrains_install_dir }}/current"
+    state: link
+
+- name: Trouver le binaire JetBrains Toolbox
+  ansible.builtin.find:
+    paths: "{{ jetbrains_install_dir }}/current"
+    patterns: "jetbrains-toolbox"
+    file_type: file
+    recurse: true
+  register: jetbrains_binary
+
+- name: Vérifier qu'un binaire JetBrains Toolbox a été trouvé
+  ansible.builtin.fail:
+    msg: "Aucun binaire JetBrains Toolbox trouvé dans {{ jetbrains_install_dir }}/current"
+  when: jetbrains_binary.files | length == 0
+
+- name: Créer le lien global vers jetbrains-toolbox
+  become: true
+  ansible.builtin.file:
+    src: "{{ jetbrains_binary.files[0].path }}"
+    dest: "{{ jetbrains_symlink }}"
+    state: link
+    force: true

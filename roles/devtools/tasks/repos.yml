@@ -1,0 +1,12 @@
+---
+- name: Ajouter les dépôts RPM nécessaires
+  become: true
+  ansible.builtin.yum_repository:
+    name: "{{ item.name }}"
+    description: "{{ item.description }}"
+    baseurl: "{{ item.baseurl }}"
+    enabled: "{{ item.enabled | default(true) }}"
+    gpgcheck: "{{ item.gpgcheck | default(true) }}"
+    repo_gpgcheck: "{{ item.repo_gpgcheck | default(false) }}"
+    gpgkey: "{{ item.gpgkey }}"
+  loop: "{{ rpm_repositories }}"

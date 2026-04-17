@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+# Usage: ./what-depends.sh /usr/bin/grep
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 <binaire>"
+    exit 1
+fi
+
+BIN="$1"
+
+if [ ! -x "$BIN" ]; then
+    echo "Erreur : $BIN n'est pas un binaire exécutable."
+    exit 1
+fi
+
+echo "=== Dépendances de $BIN ==="
+echo
+
+ldd "$BIN" | while read -r line; do
+    lib=$(echo "$line" | awk '{print $1}')
+    path=$(echo "$line" | awk '{print $3}')
+
+    # Cas spécial : linux-vdso, ld-linux, etc.
+    if [[ "$path" == "" || "$path" == "not" ]]; then
+        printf "%-30s -> %s\n" "$lib" "(lib interne / non résolue)"
+        continue
+    fi
+
+    pkg=$(rpm -qf "$path" 2>/dev/null)
+
+    printf "%-30s -> %-40s (%s)\n" "$lib" "$path" "$pkg"
+done
+
+

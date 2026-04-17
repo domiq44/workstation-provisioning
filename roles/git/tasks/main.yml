@@ -1,0 +1,248 @@
+---
+# -------------------------------------------------------------------
+# 0. Lire le machine-id et définir les variables
+# -------------------------------------------------------------------
+- name: Lire le machine-id
+  ansible.builtin.slurp:
+    src: /etc/machine-id
+  register: machine_id_raw
+
+- name: Définir les variables liées à la clé GitHub
+  ansible.builtin.set_fact:
+    git_machine_id: "{{ machine_id_raw.content | b64decode | trim }}"
+    git_github_key_name: "{{ git_github_key_name_prefix }}{{ (machine_id_raw.content | b64decode | trim)[:12] }}"
+
+# -------------------------------------------------------------------
+# 1. Créer ~/.ssh
+# -------------------------------------------------------------------
+- name: Créer ~/.ssh
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/.ssh"
+    state: directory
+    mode: '0700'
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+
+# -------------------------------------------------------------------
+# 2. Vérifier si la clé SSH locale existe
+# -------------------------------------------------------------------
+- name: Vérifier si la clé SSH GitHub existe localement
+  ansible.builtin.stat:
+    path: "{{ git_ssh_key_path }}"
+  register: github_key_local
+
+# -------------------------------------------------------------------
+# 3. Générer la clé SSH locale si absente
+# -------------------------------------------------------------------
+- name: Générer une clé SSH dédiée à GitHub (si absente)
+  ansible.builtin.openssh_keypair:
+    path: "{{ git_ssh_key_path }}"
+    type: ed25519
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+    mode: '0600'
+  when: not github_key_local.stat.exists
+
+# -------------------------------------------------------------------
+# 4.1 Nettoyer les anciennes entrées GitHub dans known_hosts
+# -------------------------------------------------------------------
+- name: Supprimer toutes les anciennes entrées GitHub dans known_hosts
+  ansible.builtin.command: >
+    ssh-keygen -R github.com -f {{ ansible_facts.env.HOME }}/.ssh/known_hosts
+  register: remove_github_known_hosts
+  changed_when: remove_github_known_hosts.rc == 0
+  failed_when: false
+
+# -------------------------------------------------------------------
+# 4.2 Ajouter GitHub à known_hosts
+# -------------------------------------------------------------------
+- name: Ajouter GitHub à known_hosts (clé ED25519 uniquement)
+  ansible.builtin.known_hosts:
+    name: github.com
+    key: "{{ lookup('pipe', 'ssh-keyscan -t ed25519 github.com 2>/dev/null') }}"
+    path: "{{ ansible_facts.env.HOME }}/.ssh/known_hosts"
+    state: present
+
+# -------------------------------------------------------------------
+# 5. Lire la clé publique locale
+# -------------------------------------------------------------------
+- name: Lire la clé publique GitHub locale
+  ansible.builtin.slurp:
+    src: "{{ git_ssh_key_path }}.pub"
+  register: github_pubkey_raw
+
+- name: Définir la clé publique GitHub
+  ansible.builtin.set_fact:
+    github_pubkey: "{{ github_pubkey_raw.content | b64decode | trim }}"
+
+# -------------------------------------------------------------------
+# 6. Lister les clés SSH GitHub existantes (API GitHub)
+# -------------------------------------------------------------------
+- name: Lister les clés SSH GitHub existantes
+  ansible.builtin.uri:
+    url: "https://api.github.com/user/keys"
+    method: GET
+    headers:
+      Authorization: "token {{ github_token }}"
+      Accept: "application/vnd.github+json"
+    return_content: yes
+  register: github_keys_response
+  when: github_token | length > 0
+
+- name: Extraire la liste des clés GitHub
+  ansible.builtin.set_fact:
+    github_keys: "{{ github_keys_response.json | default([]) }}"
+  when: github_token | length > 0
+
+# -------------------------------------------------------------------
+# 7. Détection avancée
+# -------------------------------------------------------------------
+- name: Chercher une clé GitHub identique (même nom, même clé)
+  ansible.builtin.set_fact:
+    github_key_same: >-
+      {{ github_keys
+         | selectattr('title', 'equalto', git_github_key_name)
+         | selectattr('key', 'equalto', github_pubkey)
+         | list }}
+  when: github_token | length > 0
+
+- name: Déterminer si la clé GitHub identique existe
+  ansible.builtin.set_fact:
+    github_key_identical_exists: "{{ github_key_same | length > 0 }}"
+  when: github_token | length > 0
+
+- name: Chercher une clé GitHub ayant la même valeur (pubkey)
+  ansible.builtin.set_fact:
+    github_key_same_value: >-
+      {{ github_keys
+         | selectattr('key', 'equalto', github_pubkey)
+         | list }}
+  when: github_token | length > 0
+
+- name: Déterminer si une clé GitHub avec la même valeur existe
+  ansible.builtin.set_fact:
+    github_key_same_value_exists: "{{ github_key_same_value | length > 0 }}"
+  when: github_token | length > 0
+
+# -------------------------------------------------------------------
+# 8. Supprimer les anciennes clés GitHub portant le même nom
+# -------------------------------------------------------------------
+- name: Supprimer les anciennes clés GitHub portant le même nom mais une clé différente
+  ansible.builtin.uri:
+    url: "https://api.github.com/user/keys/{{ item.id }}"
+    method: DELETE
+    headers:
+      Authorization: "token {{ github_token }}"
+      Accept: "application/vnd.github+json"
+  loop: >-
+    {{ github_keys
+       | selectattr('title', 'equalto', git_github_key_name)
+       | rejectattr('key', 'equalto', github_pubkey)
+       | list }}
+  when: github_token | length > 0
+
+# -------------------------------------------------------------------
+# 9. Supprimer/Recréer une clé GitHub avec même valeur mais mauvais nom
+# -------------------------------------------------------------------
+- name: Supprimer la clé GitHub ayant la même valeur mais un nom différent
+  ansible.builtin.uri:
+    url: "https://api.github.com/user/keys/{{ github_key_same_value[0].id }}"
+    method: DELETE
+    headers:
+      Authorization: "token {{ github_token }}"
+      Accept: "application/vnd.github+json"
+    status_code: [200, 201, 202, 204]
+  when: github_token | length > 0 and github_key_same_value_exists and github_key_same_value[0].title != git_github_key_name
+
+- name: Recréer la clé GitHub avec le bon nom après suppression
+  ansible.builtin.uri:
+    url: "https://api.github.com/user/keys"
+    method: POST
+    headers:
+      Authorization: "token {{ github_token }}"
+      Accept: "application/vnd.github+json"
+    body_format: json
+    body:
+      title: "{{ git_github_key_name }}"
+      key: "{{ github_pubkey }}"
+  when: github_token | length > 0 and github_key_same_value_exists and github_key_same_value[0].title != git_github_key_name
+
+# -------------------------------------------------------------------
+# 10. Créer la clé GitHub si elle n'existe pas déjà
+# -------------------------------------------------------------------
+- name: Créer la clé SSH sur GitHub si nécessaire
+  ansible.builtin.uri:
+    url: "https://api.github.com/user/keys"
+    method: POST
+    headers:
+      Authorization: "token {{ github_token }}"
+      Accept: "application/vnd.github+json"
+    body_format: json
+    body:
+      title: "{{ git_github_key_name }}"
+      key: "{{ github_pubkey }}"
+    status_code: [200, 201, 202, 204]
+  when: github_token | length > 0 and not github_key_identical_exists and not github_key_same_value_exists
+
+# -------------------------------------------------------------------
+# 11. Tester l'accès SSH à GitHub
+# -------------------------------------------------------------------
+- name: Tester l'accès SSH à GitHub
+  ansible.builtin.command: ssh -T git@github.com
+  register: github_ssh_test
+  failed_when: false
+  changed_when: false
+  when: github_token | length > 0
+
+- name: Afficher le résultat du test SSH GitHub
+  ansible.builtin.debug:
+    msg: "{{ github_ssh_test.stderr }}"
+  when: github_token | length > 0
+
+# -------------------------------------------------------------------
+# 12. Tester l'accès au dépôt GitHub
+# -------------------------------------------------------------------
+- name: Tester l'accès au dépôt GitHub (lecture seule)
+  ansible.builtin.command: git ls-remote git@github.com:domiq44/dotfiles.git
+  register: github_repo_test
+  failed_when: false
+  changed_when: false
+  when: github_token | length > 0
+
+- name: Afficher le résultat du test d'accès au dépôt
+  ansible.builtin.debug:
+    msg: "{{ github_repo_test.stdout }}"
+  when: github_token | length > 0
+
+# -------------------------------------------------------------------
+# 13. Installer ~/.ssh/config
+# -------------------------------------------------------------------
+- name: Installer ~/.ssh/config
+  ansible.builtin.template:
+    src: ssh_config.j2
+    dest: "{{ ansible_facts.env.HOME }}/.ssh/config"
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+    mode: '0600'
+
+# -------------------------------------------------------------------
+# 14. Installer .gitconfig
+# -------------------------------------------------------------------
+- name: Installer .gitconfig
+  ansible.builtin.template:
+    src: gitconfig.j2
+    dest: "{{ ansible_facts.env.HOME }}/.gitconfig"
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+    mode: '0644'
+
+# -------------------------------------------------------------------
+# 15. Installer .gitignore_global
+# -------------------------------------------------------------------
+- name: Installer .gitignore_global
+  ansible.builtin.copy:
+    src: gitignore_global
+    dest: "{{ ansible_facts.env.HOME }}/.gitignore_global"
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+    mode: '0644'

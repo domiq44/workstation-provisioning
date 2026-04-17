@@ -1,0 +1,17 @@
+---
+# Rôle devtools : orchestration des sous‑tâches
+
+- name: Ajouter les dépôts RPM
+  ansible.builtin.include_tasks: repos.yml
+
+- name: Installer les éditeurs de code
+  ansible.builtin.include_tasks: editors.yml
+
+- name: Installer les paquets système
+  ansible.builtin.include_tasks: packages.yml
+
+- name: Installer Docker
+  ansible.builtin.include_tasks: docker.yml
+
+- name: Installer JetBrains Toolbox
+  ansible.builtin.include_tasks: jetbrains.yml

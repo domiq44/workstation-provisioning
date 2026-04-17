@@ -1,0 +1,46 @@
+BORG-DISKFORGE(1)               User Commands              BORG-DISKFORGE(1)
+
+NAME
+       borg-diskforge - préparation d’un disque externe pour BorgBackup
+
+SYNOPSIS
+       borg-diskforge
+
+DESCRIPTION
+       borg-diskforge est un script destiné à initialiser un disque externe
+       pour être utilisé comme dépôt BorgBackup. Il effectue les opérations
+       suivantes :
+
+         - vérification du périphérique bloc
+         - affichage des informations du disque
+         - confirmation explicite avant formatage
+         - démontage automatique si nécessaire
+         - formatage en ext4 avec label personnalisé
+         - montage via udisksctl
+         - attribution des permissions à l’utilisateur
+         - création du dépôt Borg (borg init)
+
+       Ce script n’est pas destiné aux sauvegardes quotidiennes. Il sert
+       uniquement lors de la mise en service d’un nouveau disque ou lors
+       d’une réinitialisation complète.
+
+FILES
+       /media/$USER/BackupDisk/
+              Point de montage du disque préparé.
+
+       /media/$USER/BackupDisk/borg_repo
+              Dépôt Borg créé par le script.
+
+EXIT STATUS
+       0      Le disque a été préparé correctement.
+       1      Une erreur est survenue (périphérique absent, formatage, etc.).
+
+AUTHOR
+       Dominique CRETEL
+
+COPYRIGHT
+       Licence libre MIT.
+
+SEE ALSO
+       borg(1), mkfs.ext4(8), udisksctl(1)
+

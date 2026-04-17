@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+
+###############################################################################
+# ██████╗  ██████╗  ██████╗  ██████╗     ██████╗ ███████╗████████╗ ██████╗ 
+# ██╔══██╗██╔═══██╗██╔════╝ ██╔═══██╗    ██╔══██╗██╔════╝╚══██╔══╝██╔═══██╗
+# ██████╔╝██║   ██║██║  ███╗██║   ██║    ██████╔╝█████╗     ██║   ██║   ██║
+# ██╔══██╗██║   ██║██║   ██║██║   ██║    ██╔══██╗██╔══╝     ██║   ██║   ██║
+# ██████╔╝╚██████╔╝╚██████╔╝╚██████╔╝    ██║  ██║███████╗   ██║   ╚██████╔╝
+# ╚═════╝  ╚═════╝  ╚═════╝  ╚═════╝     ╚═╝  ╚═╝╚══════╝   ╚═╝    ╚═════╝ 
+#
+#                     borg‑restore — restauration d’un backup Borg
+###############################################################################
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+# === Couleurs ===
+GREEN="\e[32m"; YELLOW="\e[33m"; RED="\e[31m"; RESET="\e[0m"
+info()  { echo -e "${GREEN}[INFO]${RESET} $1"; }
+warn()  { echo -e "${YELLOW}[ATTENTION]${RESET} $1"; }
+error() { echo -e "${RED}[ERREUR]${RESET} $1"; }
+
+echo -e "\n=== ${GREEN}borg-restore — restauration d’un backup${RESET} ===\n"
+
+# === 1. Parsing des arguments ===
+USE_LATEST="no"
+
+if [ $# -eq 2 ] && [ "$1" = "--latest" ]; then
+    USE_LATEST="yes"
+    DEST="$2"
+elif [ $# -eq 1 ]; then
+    DEST="$1"
+else
+    error "Usage : $0 [--latest] <répertoire_de_destination>"
+    exit 1
+fi
+
+# === 2. Détection automatique du périphérique BackupDisk ===
+info "Recherche du périphérique contenant le label BackupDisk..."
+
+DEVICE=$(lsblk -o NAME,LABEL -nr | awk '$2=="BackupDisk"{print "/dev/"$1; exit}')
+
+if [ -z "$DEVICE" ]; then
+    error "Impossible de trouver un périphérique avec le label BackupDisk."
+    exit 1
+fi
+
+info "Périphérique détecté : $DEVICE"
+
+# === 3. Vérification du montage ===
+MOUNT_POINT=$(lsblk -no MOUNTPOINT "$DEVICE")
+
+if [ -z "$MOUNT_POINT" ]; then
+    warn "Le disque n'est pas monté. Tentative de montage..."
+    if udisksctl mount -b "$DEVICE" >/dev/null 2>&1; then
+        info "Disque monté avec succès."
+        MOUNT_POINT=$(lsblk -no MOUNTPOINT "$DEVICE")
+    else
+        error "Échec du montage automatique."
+        exit 1
+    fi
+else
+    info "Disque déjà monté sur : $MOUNT_POINT"
+fi
+
+# === 4. Détection du dépôt Borg ===
+REPO="$MOUNT_POINT/borg_repo"
+
+if [ ! -d "$REPO" ]; then
+    error "Le dépôt Borg n'existe pas à l'emplacement attendu : $REPO"
+    exit 1
+fi
+
+info "Dépôt Borg trouvé : $REPO"
+
+# === 5. Gestion du répertoire de destination ===
+
+# Protection contre DEST="."
+if [ "$DEST" = "." ]; then
+    warn "Tu as demandé une restauration dans le répertoire courant."
+    warn "C'est potentiellement dangereux."
+    read -r -p "Confirmer malgré tout ? (tape OUI) : " CONFIRM_DOT
+    if [ "$CONFIRM_DOT" != "OUI" ]; then
+        error "Refus de restaurer dans le répertoire courant."
+        exit 1
+    fi
+fi
+
+# Création si inexistant
+if [ ! -d "$DEST" ]; then
+    warn "Le répertoire $DEST n'existe pas."
+    read -r -p "Le créer ? (o/N) : " CREATE
+    if [[ "$CREATE" =~ ^[oO]$ ]]; then
+        mkdir -p "$DEST"
+    else
+        error "Abandon."
+        exit 1
+    fi
+fi
+
+# Vérification du contenu
+if [ "$(ls -A "$DEST")" ]; then
+    warn "Le répertoire $DEST n'est PAS vide."
+    read -r -p "Créer un sous-dossier daté pour éviter les collisions ? (o/N) : " SUB
+    if [[ "$SUB" =~ ^[oO]$ ]]; then
+        DATE=$(date +"%Y-%m-%d_%H-%M-%S")
+        DEST="$DEST/restore-$DATE"
+        mkdir -p "$DEST"
+        info "Restauration dans : $DEST"
+    else
+        warn "Tu as choisi de restaurer dans un répertoire non vide."
+        read -r -p "Confirmer ? (tape DANGER) : " CONFIRM_NONEMPTY
+        if [ "$CONFIRM_NONEMPTY" != "DANGER" ]; then
+            error "Abandon."
+            exit 1
+        fi
+    fi
+fi
+
+# === 6. Sélection de l’archive ===
+
+if [ "$USE_LATEST" = "yes" ]; then
+    info "Recherche de la dernière archive…"
+    ARCHIVE=$(borg list --short "$REPO" | tail -n 1)
+
+    if [ -z "$ARCHIVE" ]; then
+        error "Aucune archive trouvée dans le dépôt."
+        exit 1
+    fi
+
+    info "Dernière archive détectée : $ARCHIVE"
+else
+    echo
+    info "Archives disponibles :"
+    borg list "$REPO"
+    echo
+
+    read -r -p "Nom de l’archive à restaurer : " ARCHIVE
+
+    if ! borg list "$REPO" | grep -q "^$ARCHIVE "; then
+        error "Archive introuvable : $ARCHIVE"
+        exit 1
+    fi
+fi
+
+# === 7. Confirmation explicite ===
+warn "CE SCRIPT VA RESTAURER L’ARCHIVE : $ARCHIVE"
+warn "Destination : $DEST"
+read -r -p "Tape EXACTEMENT : RESTORE-$ARCHIVE → " CONFIRM
+
+if [ "$CONFIRM" != "RESTORE-$ARCHIVE" ]; then
+    error "Confirmation incorrecte. Abandon."
+    exit 1
+fi
+
+info "Confirmation validée."
+
+# === 8. Restauration ===
+info "Restauration de l’archive $ARCHIVE dans $DEST..."
+
+(
+    cd "$DEST"
+    borg extract --progress --info "$REPO::$ARCHIVE"
+)
+
+info "Restauration terminée."
+
+echo -e "\n=== ${GREEN}Backup restauré avec succès${RESET} ==="
+echo "Archive restaurée : $ARCHIVE"
+echo "Destination        : $DEST"
+
+

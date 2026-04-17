@@ -1,0 +1,22 @@
+---
+# ===================================================================
+# 1bis. Installation de VSCodium
+# ===================================================================
+
+- name: Ajouter le dépôt VSCodium
+  become: true
+  ansible.builtin.yum_repository:
+    name: VSCodium
+    description: "VSCodium RPM Repository"
+    baseurl: "https://paulcarroty.gitlab.io/vscodium-deb-rpm-repo/rpms/"
+    enabled: true
+    gpgcheck: true
+    repo_gpgcheck: true
+    gpgkey: "https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg"
+    metadata_expire: "1h"
+
+- name: Installer VSCodium
+  become: true
+  ansible.builtin.dnf:
+    name: codium
+    state: present

@@ -1,0 +1,50 @@
+---
+# ===================================================================
+# 1. Créer ~/bin
+# ===================================================================
+
+- name: Créer le dossier ~/bin
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/bin"
+    state: directory
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+    mode: '0755'
+
+# ===================================================================
+# 2. Installer les scripts dans ~/bin
+# ===================================================================
+
+- name: Copier les scripts dans ~/bin
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ ansible_facts.env.HOME }}/bin/{{ item }}"
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+    mode: '0755'
+  loop: "{{ bin_scripts }}"
+  loop_control:
+    label: "{{ item }}"
+
+# ===================================================================
+# 3. Installer les pages man
+# ===================================================================
+
+- name: Créer le dossier des manpages utilisateur
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/.local/share/man/man1"
+    state: directory
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+    mode: '0755'
+
+- name: Copier les pages man
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ ansible_facts.env.HOME }}/.local/share/man/man1/{{ item }}"
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+    mode: '0644'
+  loop: "{{ manpages }}"
+  loop_control:
+    label: "{{ item }}"

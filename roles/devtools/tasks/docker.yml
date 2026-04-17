@@ -1,0 +1,20 @@
+---
+- name: Supprimer podman-docker avant installation Docker
+  become: true
+  ansible.builtin.dnf:
+    name: podman-docker
+    state: absent
+
+- name: Installer Docker
+  become: true
+  ansible.builtin.dnf:
+    name: "{{ docker_packages }}"
+    state: present
+  notify: restart docker
+
+- name: Activer Docker
+  become: true
+  ansible.builtin.service:
+    name: "{{ docker_service }}"
+    enabled: true
+    state: started

@@ -1,0 +1,10 @@
+---
+- name: Installer les groupes de paquets
+  become: true
+  ansible.builtin.dnf:
+    name: "{{ item.packages }}"
+    state: present
+  loop: "{{ package_groups }}"
+  when: item.enabled
+  loop_control:
+    label: "{{ item.name }}"

@@ -1,0 +1,50 @@
+---
+# ===================================================================
+# 1. Installer les fichiers système dans /etc/profile.d/
+# ===================================================================
+
+- name: Installer les scripts dans /etc/profile.d/
+  become: true
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/profile.d/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  loop: "{{ profile_scripts }}"
+  loop_control:
+    label: "{{ item }}"
+
+# ===================================================================
+# 2. Ajouter PATH et MANPATH pour l'utilisateur courant
+# ===================================================================
+
+- name: S'assurer que ~/.bash_profile existe
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/.bash_profile"
+    state: touch
+    owner: "{{ ansible_facts.env.USER }}"
+    group: "{{ ansible_facts.env.USER }}"
+    mode: '0644'
+
+- name: Ajouter PATH et MANPATH dans ~/.bash_profile
+  ansible.builtin.blockinfile:
+    path: "{{ ansible_facts.env.HOME }}/.bash_profile"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - PATH/MANPATH"
+    create: yes
+    backup: true
+    block: |
+      # Add ~/bin to PATH if not already present
+      if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
+          export PATH="$HOME/bin:$PATH"
+      fi
+
+      # Add user manpages to MANPATH if not already present
+      if [[ -d "$HOME/.local/share/man" ]]; then
+          if [[ -z "$MANPATH" ]]; then
+              export MANPATH="$HOME/.local/share/man:$(manpath)"
+          elif [[ ":$MANPATH:" != *":$HOME/.local/share/man:"* ]]; then
+              export MANPATH="$HOME/.local/share/man:$MANPATH"
+          fi
+      fi

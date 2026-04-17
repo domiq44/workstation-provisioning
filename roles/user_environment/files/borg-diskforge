@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+
+###############################################################################
+# ██████╗  ██████╗  ██████╗  ██████╗     ██████╗ ██╗███████╗██╗  ██╗███████╗
+# ██╔══██╗██╔═══██╗██╔════╝ ██╔═══██╗    ██╔══██╗██║██╔════╝██║ ██╔╝██╔════╝
+# ██████╔╝██║   ██║██║  ███╗██║   ██║    ██████╔╝██║█████╗  █████╔╝ ███████╗
+# ██╔══██╗██║   ██║██║   ██║██║   ██║    ██╔══██╗██║██╔══╝  ██╔═██╗ ╚════██║
+# ██████╔╝╚██████╔╝╚██████╔╝╚██████╔╝    ██║  ██║██║███████╗██║  ██╗███████║
+# ╚═════╝  ╚═════╝  ╚═════╝  ╚═════╝     ╚═╝  ╚═╝╚═╝╚══════╝╚═╝  ╚═╝╚══════╝
+#
+#                     borg‑diskforge — préparation de disque Borg
+###############################################################################
+# Version améliorée :
+#   - Détection automatique du point de montage réel (Fedora, Ubuntu, Arch…)
+#   - Montage automatique via udisksctl
+#   - Aucune dépendance à /media ou /run/media
+#   - Sécurité renforcée (confirmation explicite)
+#   - Création automatique du dépôt Borg
+###############################################################################
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+# === CONFIGURATION ===
+DEVICE="/dev/sda1"
+LABEL="BackupDisk"
+REPO_NAME="borg_repo"
+
+# === Couleurs ===
+GREEN="\e[32m"; YELLOW="\e[33m"; RED="\e[31m"; RESET="\e[0m"
+info()  { echo -e "${GREEN}[INFO]${RESET} $1"; }
+warn()  { echo -e "${YELLOW}[ATTENTION]${RESET} $1"; }
+error() { echo -e "${RED}[ERREUR]${RESET} $1"; }
+
+echo -e "\n=== ${GREEN}borg-diskforge — préparation du disque${RESET} ===\n"
+
+# === 1. Vérification du périphérique ===
+if [ ! -b "$DEVICE" ]; then
+    error "Le périphérique $DEVICE n'existe pas."
+    exit 1
+fi
+info "Périphérique détecté : $DEVICE"
+
+# === 2. Informations ===
+echo
+lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT "$DEVICE"
+echo
+
+# === 3. Détection du point de montage actuel ===
+detect_mountpoint() {
+    lsblk -no MOUNTPOINT "$DEVICE" | head -n1
+}
+
+MOUNT_POINT=$(detect_mountpoint)
+
+if [ -n "$MOUNT_POINT" ]; then
+    warn "Le disque est monté sur : $MOUNT_POINT"
+    ls -al "$MOUNT_POINT"
+else
+    info "Le disque n'est pas monté."
+fi
+
+# === 4. Confirmation explicite ===
+warn "CE SCRIPT VA FORMATER $DEVICE EN EXT4 ET EFFACER TOUT SON CONTENU."
+read -r -p "Tape EXACTEMENT : FORMAT-$LABEL → " CONFIRM
+
+if [ "$CONFIRM" != "FORMAT-$LABEL" ]; then
+    error "Confirmation incorrecte. Abandon."
+    exit 1
+fi
+
+info "Confirmation validée."
+
+# === 5. Démontage si nécessaire ===
+if [ -n "$MOUNT_POINT" ]; then
+    info "Démontage du disque..."
+    sudo umount "$DEVICE"
+fi
+
+# === 6. Formatage ===
+info "Formatage en ext4 (label : $LABEL)..."
+sudo mkfs.ext4 -F -L "$LABEL" "$DEVICE"
+
+# === 7. Montage automatique ===
+info "Montage via udisksctl..."
+udisksctl mount -b "$DEVICE" >/dev/null
+
+# === 8. Détection du point de montage réel ===
+MOUNT_POINT=$(detect_mountpoint)
+
+if [ -z "$MOUNT_POINT" ]; then
+    error "Impossible de détecter le point de montage après formatage."
+    exit 1
+fi
+
+info "Disque monté sur : $MOUNT_POINT"
+
+# === 9. Permissions ===
+info "Attribution des permissions à l'utilisateur..."
+sudo chown -R "$USER:$USER" "$MOUNT_POINT"
+
+# === 10. Création du dépôt Borg ===
+REPO="$MOUNT_POINT/$REPO_NAME"
+
+if [ ! -d "$REPO" ]; then
+    info "Création du dépôt Borg : $REPO"
+    mkdir "$REPO"
+    borg init --encryption=repokey "$REPO"
+else
+    warn "Le dépôt Borg existe déjà."
+fi
+
+echo -e "\n=== ${GREEN}Disque prêt pour BorgBackup${RESET} ==="
+echo "Point de montage : $MOUNT_POINT"
+echo "Dépôt Borg       : $REPO"
+echo
+
+

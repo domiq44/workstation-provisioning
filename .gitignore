@@ -1,0 +1,43 @@
+# --- Ansible ---
+*.retry
+
+# Logs du provisioning
+logs/
+*.log
+
+# Inventaire local non versionné
+inventory/*
+!inventory/hosts
+.inventory_*.yml
+
+# Variables non chiffrées
+group_vars/**/*.yml
+host_vars/**/*.yml
+
+# Autoriser uniquement les fichiers chiffrés Vault
+!group_vars/**/*.vault.yml
+!host_vars/**/*.vault.yml
+
+# Clés Vault
+.vault/
+.vault_pass
+.vault_pass.txt
+vault_password_file
+
+# --- Python / Virtualenv ---
+__pycache__/
+*.pyc
+.env/
+.venv/
+venv/
+
+# --- Éditeurs ---
+.vscode/
+.idea/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Fichiers générés ---
+workstation-provisioning.txt

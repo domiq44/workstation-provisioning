@@ -1,0 +1,185 @@
+---
+# ===================================================================
+# 1. Config utilisateur libvirt
+# ===================================================================
+
+- name: Créer ~/.config/libvirt
+  ansible.builtin.file:
+    path: "{{ ansible_facts.env.HOME }}/.config/libvirt"
+    state: directory
+    mode: '0755'
+
+- name: Configurer virsh (qemu:///system)
+  ansible.builtin.copy:
+    dest: "{{ ansible_facts.env.HOME }}/.config/libvirt/libvirt.conf"
+    content: 'uri_default = "qemu:///system"'
+    mode: '0644'
+
+# ===================================================================
+# 2. Réseau libvirt : détection, correction, création
+# ===================================================================
+
+# --- 2.1 Détecter si vagrant-libvirt existe (il utilise virbr0)
+- name: Vérifier si le réseau vagrant-libvirt existe
+  become: true
+  ansible.builtin.command: virsh net-info vagrant-libvirt
+  register: vagrant_net
+  failed_when: false
+  changed_when: false
+
+- name: Définir si virbr0 est réservé par vagrant-libvirt
+  ansible.builtin.set_fact:
+    virbr0_reserved: "{{ vagrant_net.rc == 0 }}"
+
+# --- 2.2 Corriger le DHCP du réseau default (uniquement si virbr0 est libre)
+- name: Corriger le DHCP du réseau default
+  become: true
+  ansible.builtin.replace:
+    path: /usr/share/libvirt/networks/default.xml
+    regexp: '<range start="192\.168\.121\.1" end="192\.168\.121\.254"/>'
+    replace: '<range start="192.168.121.2" end="192.168.121.254"/>'
+  when: not virbr0_reserved
+
+# --- 2.3 Vérifier si le réseau default existe
+- name: Vérifier si le réseau default est listé
+  become: true
+  ansible.builtin.command: virsh net-list --all
+  register: net_list
+  changed_when: false
+
+- name: Définir si le réseau default existe
+  ansible.builtin.set_fact:
+    libvirt_default_exists: "{{ 'default' in net_list.stdout }}"
+
+# --- 2.4 Créer le réseau default si possible
+- name: Créer réseau default si absent et virbr0 libre
+  become: true
+  ansible.builtin.command: virsh net-define /usr/share/libvirt/networks/default.xml
+  when: not libvirt_default_exists and not virbr0_reserved
+
+# --- 2.5 Vérifier état du réseau default
+- name: Vérifier si le réseau default est actif
+  become: true
+  ansible.builtin.command: virsh net-info default
+  register: net_info
+  failed_when: false
+  changed_when: false
+  when: not virbr0_reserved
+
+# --- 2.6 Démarrer le réseau default si inactif
+- name: Démarrer réseau default si inactif
+  become: true
+  ansible.builtin.command: virsh net-start default
+  when:
+    - not virbr0_reserved
+    - "'inactive' in net_info.stdout"
+  register: net_start
+  failed_when: false
+  changed_when: net_start.rc == 0
+
+# --- 2.7 Activer autostart
+- name: Activer autostart réseau default
+  become: true
+  ansible.builtin.command: virsh net-autostart default
+  when: not virbr0_reserved
+  failed_when: false
+  changed_when: false
+
+# ===================================================================
+# 3. firewalld : NAT + masquerade + source
+# ===================================================================
+
+- name: Ajouter masquerade dans la zone libvirt
+  become: true
+  ansible.builtin.command: firewall-cmd --zone=libvirt --add-masquerade --permanent
+  register: fw_masq
+  failed_when: false
+  changed_when: fw_masq.rc == 0
+
+- name: Ajouter forward dans la zone libvirt
+  become: true
+  ansible.builtin.command: firewall-cmd --zone=libvirt --add-forward --permanent
+  register: fw_fwd
+  failed_when: false
+  changed_when: fw_fwd.rc == 0
+
+- name: Ajouter la source 192.168.121.0/24 dans la zone libvirt
+  become: true
+  ansible.builtin.command: firewall-cmd --zone=libvirt --add-source=192.168.121.0/24 --permanent
+  register: fw_src
+  failed_when: false
+  changed_when: fw_src.rc == 0
+
+# ===================================================================
+# 4. Règles directes pour contourner Docker
+# ===================================================================
+
+- name: Autoriser FORWARD -i virbr0
+  become: true
+  ansible.builtin.command: firewall-cmd --permanent --direct --add-rule ipv4 filter FORWARD 0 -i virbr0 -j ACCEPT
+  register: fw_dir1
+  failed_when: false
+  changed_when: fw_dir1.rc == 0
+
+- name: Autoriser FORWARD -o virbr0
+  become: true
+  ansible.builtin.command: firewall-cmd --permanent --direct --add-rule ipv4 filter FORWARD 0 -o virbr0 -j ACCEPT
+  register: fw_dir2
+  failed_when: false
+  changed_when: fw_dir2.rc == 0
+
+# ===================================================================
+# 5. Détection interface Internet (Wi‑Fi ou Ethernet)
+# ===================================================================
+
+- name: Détecter interface Internet active
+  ansible.builtin.command: nmcli -t -f DEVICE,STATE d
+  register: nmcli_devices
+
+- name: Extraire interface active
+  ansible.builtin.set_fact:
+    internet_iface: "{{ nmcli_devices.stdout_lines | select('search', ':connected') | map('regex_replace', ':connected', '') | list | first }}"
+
+- name: Ajouter interface Internet dans zone public
+  become: true
+  ansible.builtin.command: firewall-cmd --zone=public --add-interface={{ internet_iface }} --permanent
+  register: fw_iface
+  failed_when: false
+  changed_when: fw_iface.rc == 0
+
+# ===================================================================
+# 6. Activer ip_forward
+# ===================================================================
+
+- name: Activer net.ipv4.ip_forward
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-ipforward.conf
+    content: "net.ipv4.ip_forward = 1\n"
+    mode: '0644'
+
+# ===================================================================
+# 7. Désactiver rp_filter (Wi‑Fi + virbr0)
+# ===================================================================
+
+- name: Désactiver rp_filter (all, interface Internet, virbr0)
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-rpfilter.conf
+    content: |
+      net.ipv4.conf.all.rp_filter = 0
+      net.ipv4.conf.{{ internet_iface }}.rp_filter = 0
+      net.ipv4.conf.virbr0.rp_filter = 0
+    mode: '0644'
+
+# ===================================================================
+# 8. Recharger sysctl + firewalld
+# ===================================================================
+
+- name: Recharger sysctl
+  become: true
+  ansible.builtin.command: sysctl --system
+
+- name: Recharger firewalld
+  become: true
+  ansible.builtin.command: firewall-cmd --reload

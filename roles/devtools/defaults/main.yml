@@ -1,0 +1,92 @@
+---
+# ============================
+# Dépôts RPM (factorisés)
+# ============================
+rpm_repositories:
+  - name: vscode
+    description: Visual Studio Code
+    baseurl: https://packages.microsoft.com/yumrepos/vscode
+    gpgkey: https://packages.microsoft.com/keys/microsoft.asc
+    enabled: true
+    gpgcheck: true
+
+  - name: VSCodium
+    description: VSCodium RPM Repository
+    baseurl: https://paulcarroty.gitlab.io/vscodium-deb-rpm-repo/rpms/
+    gpgkey: https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg
+    enabled: true
+    gpgcheck: true
+    repo_gpgcheck: true
+
+# ============================
+# VSCode (stable + insiders)
+# ============================
+install_vscode_insiders: true
+
+vscode_settings_file: "{{ ansible_facts.env.HOME }}/.config/Code/User/settings.json"
+vscode_settings:
+  telemetry.telemetryLevel: "off"
+  telemetry.enableCrashReporter: false
+  telemetry.enableTelemetry: false
+
+# Liste factorisée des éditeurs
+editors:
+  - name: code
+    enabled: true
+
+  - name: code-insiders
+    enabled: "{{ install_vscode_insiders }}"
+
+  - name: codium
+    enabled: true
+
+# ============================
+# Groupes de paquets système
+# ============================
+docker_packages:
+  - moby-engine
+  - docker-compose
+
+docker_service: docker
+
+podman_packages:
+  - podman
+  - podman-compose
+
+c_cpp_packages:
+  - clang-tools-extra
+  - cmake
+  - cppcheck
+  - gcc
+  - gdb
+  - make
+  - ncurses
+  - ncurses-devel
+  - pcre
+  - pcre-devel
+  - valgrind
+
+package_groups:
+  - name: docker
+    enabled: true
+    packages: "{{ docker_packages }}"
+
+  - name: podman
+    enabled: true
+    packages: "{{ podman_packages }}"
+
+  - name: c_cpp
+    enabled: true
+    packages: "{{ c_cpp_packages }}"
+
+# ============================
+# JetBrains Toolbox
+# ============================
+jetbrains_version: "2.3.2.31487"
+
+jetbrains_url: "https://download.jetbrains.com/toolbox/jetbrains-toolbox-{{ jetbrains_version }}.tar.gz"
+jetbrains_checksum_url: "https://download.jetbrains.com/toolbox/jetbrains-toolbox-{{ jetbrains_version }}.tar.gz.sha256"
+
+jetbrains_archive: "/tmp/jetbrains-toolbox-{{ jetbrains_version }}.tar.gz"
+jetbrains_install_dir: "/opt/jetbrains-toolbox"
+jetbrains_symlink: "/usr/local/bin/jetbrains-toolbox"

@@ -1,0 +1,27 @@
+[user]
+    name = domiq44
+    email = domiq44@localhost
+
+[github]
+    user = domiq44
+
+[core]
+    autocrlf = input
+    editor = vim
+    excludesfile = ~/.gitignore_global
+
+[color]
+    ui = auto
+
+[init]
+    defaultBranch = main
+
+[alias]
+    st = status
+    co = checkout
+    br = branch
+    lg = log --oneline --graph --decorate --all
+
+[url "git@github.com:domiq44/"]
+    insteadOf = https://github.com/domiq44/
+

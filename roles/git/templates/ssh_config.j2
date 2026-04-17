@@ -1,0 +1,9 @@
+# Configuration SSH personnalisée pour GitHub
+
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile {{ git_ssh_key_path }}
+    IdentitiesOnly yes
+    PubkeyAuthentication yes
+    PreferredAuthentications publickey

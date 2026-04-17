@@ -1,0 +1,44 @@
+BORG-HOMESHIELD(1)              User Commands              BORG-HOMESHIELD(1)
+
+NAME
+       borg-homeshield - sauvegarde complète du répertoire $HOME avec Borg
+
+SYNOPSIS
+       borg-homeshield
+
+DESCRIPTION
+       borg-homeshield est un script de sauvegarde destiné à Fedora Linux.
+       Il crée une archive Borg contenant l’intégralité du répertoire $HOME,
+       en appliquant une liste d’exclusions cohérente et optimisée :
+       caches, containers, machines virtuelles, dépendances de build,
+       métadonnées d’IDE, fichiers temporaires, etc.
+
+       Le script gère automatiquement :
+         - la vérification du montage du disque externe
+         - la création du dépôt Borg si nécessaire
+         - la rotation des sauvegardes (daily/weekly/monthly)
+         - la vérification mensuelle du dépôt
+         - la journalisation complète (global + session)
+         - le verrouillage pour éviter les exécutions simultanées
+
+FILES
+       ~/.local/log/borgbackup/
+              Répertoire contenant les logs globaux et par exécution.
+
+       /run/media/$USER/BackupDisk/borg_repo
+              Dépôt Borg utilisé pour stocker les archives.
+
+EXIT STATUS
+       0      La sauvegarde s’est déroulée correctement.
+       1      Une erreur est survenue (montage, espace disque, Borg, prune…).
+
+AUTHOR
+       Dominique CRETEL
+
+COPYRIGHT
+       Licence libre MIT.
+
+SEE ALSO
+       borg(1), borg-create(1), borg-prune(1), borg-check(1)
+
+

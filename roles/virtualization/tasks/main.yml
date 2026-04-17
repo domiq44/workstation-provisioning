@@ -1,0 +1,54 @@
+---
+# 1. Vérification CPU
+- name: Vérifier support CPU (vmx/svm)
+  ansible.builtin.command: grep -E "(vmx|svm)" /proc/cpuinfo
+  register: cpu_check
+  failed_when: cpu_check.rc != 0
+  changed_when: false
+
+# 2. Installation des paquets de virtualisation
+- name: Installer les paquets de virtualisation
+  become: true
+  ansible.builtin.dnf:
+    name:
+      - "@virtualization"
+      - virt-manager
+      - bridge-utils
+    state: present
+
+# 3. Activation libvirtd
+- name: Activer libvirtd
+  become: true
+  ansible.builtin.service:
+    name: libvirtd
+    enabled: true
+    state: started
+
+# 4. Ajouter l’utilisateur aux groupes kvm + libvirt
+- name: Ajouter l'utilisateur au groupe kvm
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_facts.user_id }}"
+    groups: kvm
+    append: true
+
+- name: Ajouter l'utilisateur au groupe libvirt
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_facts.user_id }}"
+    groups: libvirt
+    append: true
+
+# 5. Autoriser le groupe libvirt à gérer libvirtd via polkit
+- name: Autoriser libvirt via polkit
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/polkit-1/rules.d/50-libvirt.rules
+    mode: '0644'
+    content: |
+      polkit.addRule(function(action, subject) {
+          if (action.id == "org.libvirt.unix.manage" &&
+              subject.isInGroup("libvirt")) {
+              return polkit.Result.YES;
+          }
+      });

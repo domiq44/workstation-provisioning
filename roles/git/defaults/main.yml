@@ -1,0 +1,9 @@
+git_user_name: "domiq44"
+git_user_email: "12345678+domiq44@users.noreply.github.com"
+git_github_user: "domiq44"
+
+git_ssh_key_path: "{{ ansible_facts.env.HOME }}/.ssh/id_github"
+git_github_key_name_prefix: "fedora-"
+
+# Token GitHub optionnel (désactive les appels API si vide)
+github_token: ""

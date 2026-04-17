@@ -1,0 +1,62 @@
+---
+- name: Setup complet Fedora
+  hosts: all
+
+  roles:
+
+    # ---------------------------------------------------------------
+    # Environnement utilisateur (fusion des anciens petits rôles)
+    # ---------------------------------------------------------------
+    - role: user_environment
+      tags:
+        - user_env
+        - user_env::bash
+        - user_env::binfiles
+        - user_env::dotfiles
+        - user_env::packages
+        - user_env::vagrant
+
+    # ---------------------------------------------------------------
+    # Outils de développement
+    # ---------------------------------------------------------------
+    - role: devtools
+      tags:
+        - devtools
+        - devtools::docker
+        - devtools::podman
+        - devtools::c_cpp
+        - devtools::vscode
+        - devtools::vscodium
+        - devtools::jetbrains
+
+    # ---------------------------------------------------------------
+    # Git + SSH + API GitHub
+    # ---------------------------------------------------------------
+    - role: git
+      tags:
+        - git
+        - git::ssh
+        - git::config
+        - git::github_api
+
+    # ---------------------------------------------------------------
+    # Virtualisation (toujours exécutée)
+    # ---------------------------------------------------------------
+    - role: virtualization
+      tags:
+        - virtualization
+        - virtualization::packages
+        - virtualization::libvirtd
+        - virtualization::groups
+        - virtualization::polkit
+
+    # ---------------------------------------------------------------
+    # Configuration avancée libvirt (uniquement sur l’hôte)
+    # ---------------------------------------------------------------
+    - role: libvirt_config
+      tags:
+        - virtualization
+        - virtualization::libvirt_config
+        - libvirt_fix
+      when: ansible_facts.virtualization_role != "guest"
+

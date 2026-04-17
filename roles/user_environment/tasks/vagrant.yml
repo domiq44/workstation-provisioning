@@ -1,0 +1,12 @@
+---
+- name: Installer Vagrant et plugin libvirt
+  become: true
+  ansible.builtin.dnf:
+    name:
+      - vagrant
+      - vagrant-libvirt
+    state: present
+
+- name: Vérifier que Vagrant est installé
+  ansible.builtin.command: vagrant --version
+  changed_when: false

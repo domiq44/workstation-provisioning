@@ -1,0 +1,37 @@
+" --- Apparence ---
+syntax on
+set bg=dark
+colorscheme default
+
+" Numéros de ligne
+set number
+set cursorline
+highlight CursorLine ctermbg=236
+
+" --- Indentation ---
+set tabstop=4
+set shiftwidth=4
+set expandtab
+set autoindent
+set smartindent
+
+" --- Fichiers temporaires ---
+set nobackup
+set nowritebackup
+set noswapfile
+
+" --- Navigation ---
+set showmatch
+set scrolloff=5
+set path+=**
+
+" --- Complétion ---
+set wildmenu
+set wildmode=longest:full,full
+
+" --- Recherche ---
+set ignorecase
+set smartcase
+set incsearch
+set hlsearch
+
