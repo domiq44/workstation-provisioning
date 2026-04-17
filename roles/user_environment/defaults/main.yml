@@ -30,7 +30,6 @@ user_env_packages:
   - cockpit
   - dos2unix
   - dosbox
-  - epiphany
   - fastfetch
   - git
   - gitg
