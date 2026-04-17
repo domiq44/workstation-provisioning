@@ -6,3 +6,17 @@
     state: present
   loop: "{{ editors }}"
   when: item.enabled
+
+- name: Désinstaller VSCodium si désactivé
+  become: true
+  ansible.builtin.dnf:
+    name: codium
+    state: absent
+  when: not install_vscodium
+
+- name: Désinstaller VSCode Insiders si désactivé
+  become: true
+  ansible.builtin.dnf:
+    name: code-insiders
+    state: absent
+  when: not install_vscode_insiders
