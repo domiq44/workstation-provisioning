@@ -1,4 +1,12 @@
-# 🚀 Provisioning Fedora Workstation — Installation automatisée & reproductible avec Ansible
+# 🚀 Provisioning Fedora Workstation — Installation automatisisée & reproductible avec Ansible
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Ansible-Automation-blue?logo=ansible" />
+  <img src="https://img.shields.io/badge/Fedora-Workstation-294172?logo=fedora&logoColor=white" />
+  <img src="https://img.shields.io/badge/Makefile-Supported-orange?logo=gnu" />
+  <img src="https://img.shields.io/badge/Idempotent-Yes-success" />
+  <img src="https://img.shields.io/badge/License-MIT-green" />
+</p>
 
 Ce projet automatise **l’installation complète d’une workstation Fedora**, incluant :
 
@@ -19,7 +27,7 @@ L’objectif : **obtenir une machine prête à travailler en quelques minutes**,
 
 # 🏗️ Architecture du projet
 
-Le provisioning repose sur une architecture simple, modulaire et entièrement automatisée :
+Le provisioning repose sur une architecture simple, modulaire et entièrement automatisisée :
 
 ```
 bootstrap.sh
@@ -42,7 +50,7 @@ roles/
 1. **bootstrap.sh**
    - Installe Ansible si nécessaire  
    - Installe les dépendances minimales  
-   - Récupère les rôles Galaxy (requirements.yml)  
+   - Récupère les rôles Galaxy  
    - Lance le provisioning principal  
 
 2. **provision-workstation.sh**
@@ -54,18 +62,11 @@ roles/
    - Playbook principal  
    - Ordonne l’exécution des rôles  
    - Applique les tags (`git`, `devtools`, `virtualization`, `libvirt_fix`, etc.)  
-   - Empêche l’exécution de certains rôles dans une VM (ex : libvirt_config)  
+   - Empêche l’exécution de certains rôles dans une VM  
 
 4. **roles/**
    - Chaque rôle est autonome, idempotent et documenté  
    - Les rôles peuvent être exécutés indépendamment via `--tags`  
-
-Cette architecture permet :
-
-- une installation reproductible  
-- une maintenance simple  
-- une exécution partielle (ex : `--tags git`)  
-- une isolation claire des responsabilités  
 
 ---
 
@@ -76,24 +77,15 @@ Cette architecture permet :
 ### Objectif  
 Obtenir une machine **100 % opérationnelle en quelques minutes**, sans configuration manuelle.
 
-### Procédure  
+### Procédure (script)
 ```bash
-git clone https://github.com/domiq44/workstation-provisioning.git
-cd workstation-provisioning
 ./bootstrap.sh
 ```
 
-### Ce que fait le provisioning  
-- installe Ansible et les dépendances minimales  
-- configure Git + SSH + clé GitHub  
-- installe Docker, Podman, toolchains, éditeurs, utilitaires  
-- configure KVM/libvirt + Vagrant  
-- applique la correction réseau libvirt/firewalld/Docker  
-- installe les dotfiles et scripts  
-- teste automatiquement l’environnement (GitHub + VM Alpine)  
-
-### Résultat  
-Une machine prête à travailler : dev, virtualisation, containers, GitHub, tout fonctionne immédiatement.
+### Procédure (Makefile)
+```bash
+make run
+```
 
 ---
 
@@ -102,65 +94,84 @@ Une machine prête à travailler : dev, virtualisation, containers, GitHub, tout
 ### Objectif  
 Rendre la machine **cohérente, propre et reproductible**, sans casser l’existant.
 
-### Procédure  
+### Procédure (script)
 ```bash
 ./provision-workstation.sh
 ```
 
-### Ce que fait le provisioning  
-- détecte les configurations existantes  
-- ne modifie que ce qui doit l’être  
-- ne casse pas les installations manuelles  
-- répare les incohérences (ex : Docker + Podman + firewalld)  
-- remet Git/SSH dans un état propre  
-- garantit l’idempotence  
-
-### Résultat  
-Une machine stabilisée, homogène, reproductible, sans perte de configuration personnelle.
+### Procédure (Makefile)
+```bash
+make run
+```
 
 ---
 
-## 🛠️ 3. Je veux juste fixer libvirt/Docker (réseau cassé)
+## 🛠️ 3. Fix réseau libvirt/Docker uniquement
 
-### Procédure  
+### Procédure (script)
 ```bash
 ansible-playbook site.yml --tags libvirt_fix
 ```
 
-### Ce que fait le rôle `libvirt_config`  
-- ajoute masquerade + forward dans la zone libvirt  
-- ajoute la source `192.168.121.0/24`  
-- ajoute les règles directes FORWARD pour contourner Docker  
-- détecte automatiquement l’interface Internet  
-- active `ip_forward`  
-- désactive `rp_filter`  
-- recharge sysctl + firewalld  
-
-### Résultat  
-Les VMs libvirt retrouvent immédiatement l’accès Internet.
+### Procédure (Makefile)
+```bash
+make libvirt-fix
+```
 
 ---
 
 ## 🧰 4. Réinstaller toute la virtualisation
 
-### Procédure  
+### Procédure (script)
 ```bash
 ansible-playbook site.yml --tags virtualization
 ```
 
-### Résultat  
-Une stack KVM/libvirt/Vagrant **propre et fonctionnelle**.
+### Procédure (Makefile)
+```bash
+make tags TAGS=virtualization
+```
 
 ---
 
 ## 🎯 Résumé
 
-| Scénario | Commande | Résultat |
-|---------|----------|----------|
-| Nouvelle machine | `./bootstrap.sh` | Installation complète |
-| Machine existante | `./provision-workstation.sh` | Mise en conformité |
-| Fix réseau libvirt/Docker | `ansible-playbook site.yml --tags libvirt_fix` | Réseau VM réparé |
-| Réparer toute la virtualisation | `ansible-playbook site.yml --tags virtualization` | Stack restaurée |
+| Scénario | Script | Makefile | Résultat |
+|---------|--------|----------|----------|
+| Nouvelle machine | `./bootstrap.sh` | `make run` | Installation complète |
+| Machine existante | `./provision-workstation.sh` | `make run` | Mise en conformité |
+| Fix libvirt/Docker | `ansible-playbook --tags libvirt_fix` | `make libvirt-fix` | Réseau VM réparé |
+| Virtualisation complète | `ansible-playbook --tags virtualization` | `make tags TAGS=virtualization` | Stack restaurée |
+
+---
+
+# 🛠️ Utilisation via Makefile
+
+Le projet inclut un **Makefile global** permettant d’exécuter facilement les opérations courantes.
+
+## Commandes principales
+
+- **make run** — provisioning complet  
+- **make check** — mode `--check`  
+- **make dry** — simulation (`--dry-run`)  
+- **make tags TAGS=x** — exécute certains tags  
+- **make list-tags** — affiche les tags disponibles  
+- **make galaxy-install** — installe les rôles Galaxy  
+- **make lint** — vérifie la syntaxe Ansible  
+- **make libvirt-fix** — applique uniquement la correction réseau libvirt/firewalld  
+- **make test-vagrant** — test d’intégration Vagrant/libvirt  
+- **make test** — lance tous les tests  
+- **make arbo** — génère l’arborescence du projet  
+
+## Exemples
+
+```bash
+make tags TAGS=git
+make tags TAGS=packages,git
+make libvirt-fix TARGET=vagrantvm
+make test-vagrant
+make arbo
+```
 
 ---
 
@@ -214,23 +225,14 @@ git_github_user: "votre-compte-github"
 github_token: "ghp_xxxxxxxxxxxxxxxxxxxxx"
 ```
 
-### À quoi servent ces variables ?
-
-- **git_user_name / git_user_email** → génèrent `.gitconfig`  
-- **git_github_user** → nom de la clé GitHub + API  
-- **git_ssh_key_path** → emplacement de la clé SSH  
-- **git_github_key_name_prefix** → préfixe pour nommer la clé GitHub  
-- **github_token** → active la gestion API GitHub  
-
 ---
 
 # 📦 Fonctionnalités principales
 
-## 🔐 Gestion Git & GitHub (automatisée et idempotente)
+## 🔐 Gestion Git & GitHub
 
 - clé SSH unique par machine  
-- détection locale + GitHub  
-- gestion automatique via API  
+- gestion automatique via API GitHub  
 - `.ssh/config` + `.gitconfig`  
 - tests automatiques GitHub  
 
@@ -238,13 +240,13 @@ github_token: "ghp_xxxxxxxxxxxxxxxxxxxxx"
 
 ## 🐳 Docker & Podman
 
-- suppression `podman-docker`  
 - installation Docker + compose  
 - installation Podman + podman-compose  
+- suppression `podman-docker`  
 
 ---
 
-## 🖥️ Virtualisation complète (KVM + libvirt)
+## 🖥️ Virtualisation complète
 
 - installation libvirt, qemu, virt-install  
 - configuration polkit  
@@ -253,11 +255,10 @@ github_token: "ghp_xxxxxxxxxxxxxxxxxxxxx"
 
 ---
 
-## 🔥 Correction avancée firewalld + Docker + libvirt
+## 🔥 Correction firewalld + Docker + libvirt
 
 - masquerade + forward  
 - règles directes FORWARD  
-- détection interface Internet  
 - ip_forward + rp_filter  
 - reload firewalld + sysctl  
 
