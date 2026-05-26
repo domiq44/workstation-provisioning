@@ -59,11 +59,17 @@ c_cpp_packages:
   - gcc
   - gdb
   - make
+  - meson
   - ncurses
   - ncurses-devel
+  - ninja-build
   - pcre
   - pcre-devel
   - valgrind
+
+rust_packages:
+  - cargo
+  - rust
 
 package_groups:
   - name: docker
@@ -77,6 +83,10 @@ package_groups:
   - name: c_cpp
     enabled: true
     packages: "{{ c_cpp_packages }}"
+
+  - name: rust
+    enabled: true
+    packages: "{{ rust_packages }}"
 
 # ============================
 # JetBrains Toolbox

@@ -31,6 +31,7 @@ user_env_packages:
   - dos2unix
   - dosbox
   - fastfetch
+  - gimagereader-gtk
   - git
   - gitg
   - gnome-mahjongg
@@ -38,6 +39,7 @@ user_env_packages:
   - gparted
   - graphviz
   - htop
+  - inotify-tools
   - jq
   - keepassxc
   - meld
@@ -52,5 +54,7 @@ user_env_packages:
   - syncthing
   - tree
   - vim
+  - wget
   - xclip
   - xsel
+  - zenity
