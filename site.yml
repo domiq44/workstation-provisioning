@@ -15,6 +15,7 @@
         - user_env::dotfiles
         - user_env::packages
         - user_env::vagrant
+      when: workstation_enable_vagrant or workstation_enable_virtualization
 
     # ---------------------------------------------------------------
     # Outils de développement
@@ -28,6 +29,7 @@
         - devtools::vscode
         - devtools::vscodium
         - devtools::jetbrains
+      when: workstation_enable_docker or workstation_enable_podman
 
     # ---------------------------------------------------------------
     # Git + SSH + API GitHub
@@ -38,9 +40,10 @@
         - git::ssh
         - git::config
         - git::github_api
+      # Toujours exécuté → pas de condition
 
     # ---------------------------------------------------------------
-    # Virtualisation (toujours exécutée)
+    # Virtualisation (contrôlée par variable globale)
     # ---------------------------------------------------------------
     - role: virtualization
       tags:
@@ -49,6 +52,7 @@
         - virtualization::libvirtd
         - virtualization::groups
         - virtualization::polkit
+      when: workstation_enable_virtualization
 
     # ---------------------------------------------------------------
     # Configuration avancée libvirt (uniquement sur l’hôte)
@@ -58,5 +62,6 @@
         - virtualization
         - virtualization::libvirt_config
         - libvirt_fix
-      when: ansible_facts.virtualization_role != "guest"
-
+      when:
+        - workstation_enable_virtualization
+        - ansible_facts.virtualization_role != "guest"

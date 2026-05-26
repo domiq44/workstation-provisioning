@@ -10,6 +10,7 @@
 
 - name: Installer Docker
   ansible.builtin.include_tasks: docker.yml
+  when: workstation_enable_docker
 
 - name: Installer VSCode
   ansible.builtin.include_tasks: vscode.yml
@@ -20,3 +21,9 @@
 
 - name: Installer JetBrains Toolbox
   ansible.builtin.include_tasks: jetbrains.yml
+
+- name: Installer paquets de développement supplémentaires
+  ansible.builtin.dnf:
+    name: "{{ workstation_extra_dev_packages }}"
+    state: present
+  when: workstation_extra_dev_packages | length > 0
